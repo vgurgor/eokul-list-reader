@@ -1,0 +1,149 @@
+# 📚 E-Okul Öğrenci Listesi PDF Okuyucu API
+
+<div align="center">
+
+![Python](https://img.shields.io/badge/Python-3.8%2B-blue?logo=python)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.109.2-green?logo=fastapi)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Status](https://img.shields.io/badge/status-production-green.svg)
+
+</div>
+
+Bu FastAPI servisi, E-Okul'dan alınan PDF formatındaki öğrenci listelerini JSON formatına dönüştürür.
+
+## ✨ Özellikler
+
+- 🔄 PDF URL'den otomatik indirme
+- 📝 PDF dosyasından sınıf bilgilerini okur
+- 👥 Öğrenci bilgilerini (no, öğrenci no, ad, soyad, cinsiyet) ayıklar
+- 👨‍🏫 Sınıf öğretmeni bilgilerini işler
+- 📊 Sınıf istatistiklerini hesaplar (toplam öğrenci, cinsiyet dağılımı)
+- ⚠️ Hata yönetimi ve raporlama
+- 🚀 FastAPI ile REST API desteği
+- 🔄 Çoklu format desteği (FTL, AL, İlkokul, Anaokulu)
+- ⚡ Yüksek performans için çoklu işçi (worker) desteği
+
+## 📋 Desteklenen Formatlar
+
+| Format | Örnek |
+|--------|-------|
+| 🏫 FTL | "FTL - 9. Sınıf / A Şubesi" |
+| 🎓 AL | "AL - 12. Sınıf / C Şubesi" |
+| 🏫 İlkokul | "4. Sınıf / D Şubesi" |
+| 🎈 Anaokulu | "Anaokulu 4 Yaş / A Şubesi" |
+
+## 🚀 Production Kurulum
+
+### 🛠️ Sistem Gereksinimleri
+
+| Gereksinim | Versiyon | Açıklama |
+|------------|----------|-----------|
+| 🐍 Python | 3.8+ | Temel programlama dili |
+| 📦 pip | En son | Python paket yöneticisi |
+| 🌐 Nginx | 1.18+ | Web sunucusu (önerilen) |
+
+### 📥 Kurulum Adımları
+
+1. **Sistem Paketlerini Yükle**
+```bash
+sudo apt update
+sudo apt install python3 python3-pip python3-venv nginx
+```
+
+2. **Proje Kurulumu**
+```bash
+# Proje dizinini oluştur
+sudo mkdir /opt/eokul-pdf-reader
+sudo chown www-data:www-data /opt/eokul-pdf-reader
+cd /opt/eokul-pdf-reader
+
+# Projeyi klonla ve kur
+git clone https://github.com/your-username/eokul-pdf-reader.git .
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 🔧 Servis Yapılandırması
+
+1. **Systemd Servisi**
+```ini
+[Unit]
+Description=E-Okul PDF Reader API
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/eokul-pdf-reader
+Environment="PATH=/opt/eokul-pdf-reader/venv/bin"
+Environment="PYTHONPATH=/opt/eokul-pdf-reader"
+ExecStart=/opt/eokul-pdf-reader/venv/bin/python -m uvicorn api:app --host 0.0.0.0 --port 8000 --workers 4
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+```
+
+2. **Nginx Yapılandırması**
+```nginx
+upstream eokul_api {
+    server 127.0.0.1:8000;
+}
+
+server {
+    listen 80;
+    server_name your-domain.com;
+    client_max_body_size 10M;
+
+    location / {
+        proxy_pass http://eokul_api;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+## 📝 Örnek Kullanım
+
+### 🐍 Python
+```python
+import requests
+
+url = "https://your-domain.com/process-pdf"
+data = {
+    "pdf_url": "https://example.com/student-list.pdf"
+}
+
+response = requests.post(url, json=data)
+print(response.json())
+```
+
+### 🌐 JavaScript
+```javascript
+fetch('https://your-domain.com/process-pdf', {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+        pdf_url: 'https://example.com/student-list.pdf'
+    })
+})
+.then(response => response.json())
+.then(data => console.log(data));
+```
+
+## 📚 Dokümantasyon
+
+- 📖 [Swagger UI](https://your-domain.com/docs)
+- 📑 [ReDoc](https://your-domain.com/redoc)
+
+## 📞 Destek
+
+Sorunlarınız için [GitHub Issues](https://github.com/your-username/eokul-pdf-reader/issues) sayfasını kullanabilirsiniz.
+
+## 📄 Lisans
+
+Bu proje MIT lisansı altında lisanslanmıştır. Detaylar için [LICENSE](LICENSE) dosyasına bakınız.

@@ -83,6 +83,8 @@ def extract_class_info(text, teacher_line=None):
         r'FTL\s*-\s*(\d+)\.\s*Sınıf\s*/\s*([A-Z])\s*Şubesi\s*\(([^)]*)\)',
         # AL formatı için pattern
         r'AL\s*-\s*(\d+)\.\s*Sınıf\s*/\s*([A-Z])\s*Şubesi\s*\(([^)]*)\)',
+        # Hazırlık sınıfı formatı için pattern
+        r'Hazırlık\s*Sınıfı\s*/\s*([A-Z])\s*Şubesi',
         # İlkokul/Normal format için pattern
         r'(\d+)\.\s*Sınıf\s*/\s*([A-Z])\s*Şubesi',
         # Anaokulu formatı için pattern
@@ -111,14 +113,19 @@ def extract_class_info(text, teacher_line=None):
             logger.debug(f"Öğretmen bilgisi bulundu: {teacher_name}")
     
     if grade_match:
+        # Hazırlık sınıfı formatı için özel işlem
+        if "Hazırlık" in text:
+            grade = "Hazırlık"
+            section = grade_match.group(1)
+            class_type = "Hazırlık"
         # Anaokulu formatı için özel işlem
-        if "Anaokulu" in text:
+        elif "Anaokulu" in text:
             grade = f"Anaokulu {grade_match.group(1)} Yaş"
             section = grade_match.group(2)
             class_type = "Anaokulu"
         else:
             grade = grade_match.group(1)
-            section = grade_match.group(2)
+            section = grade_match.group(2) if len(grade_match.groups()) > 1 else "A"
             # Okul türüne göre alan bilgisi
             if "FTL" in text:
                 class_type = grade_match.group(3).strip() if len(grade_match.groups()) > 2 else "FEN BİLİMLERİ"

@@ -79,6 +79,10 @@ def extract_class_info(text, teacher_line=None):
     
     # Farklı formatlar için regex pattern'ları
     patterns = [
+        # FTL - Hazırlık formatı için pattern
+        r'FTL\s*-\s*Hazırlık\s*Sınıfı\s*/\s*([A-Z])\s*Şubesi\s*\(([^)]*)\)',
+        # AL - Hazırlık formatı için pattern
+        r'AL\s*-\s*Hazırlık\s*Sınıfı\s*/\s*([A-Z])\s*Şubesi\s*\(([^)]*)\)',
         # FTL formatı için pattern
         r'FTL\s*-\s*(\d+)\.\s*Sınıf\s*/\s*([A-Z])\s*Şubesi\s*\(([^)]*)\)',
         # AL formatı için pattern
@@ -95,9 +99,11 @@ def extract_class_info(text, teacher_line=None):
     
     # Her pattern'ı dene
     grade_match = None
-    for pattern in patterns:
+    pattern_index = -1
+    for i, pattern in enumerate(patterns):
         grade_match = re.search(pattern, text, re.IGNORECASE)
         if grade_match:
+            pattern_index = i
             break
     
     teachers = []
@@ -113,8 +119,18 @@ def extract_class_info(text, teacher_line=None):
             logger.debug(f"Öğretmen bilgisi bulundu: {teacher_name}")
     
     if grade_match:
+        # FTL - Hazırlık formatı için özel işlem
+        if pattern_index == 0:  # FTL - Hazırlık pattern'i
+            grade = "Hazırlık"
+            section = grade_match.group(1)
+            class_type = grade_match.group(2).strip() if len(grade_match.groups()) > 1 else "FEN BİLİMLERİ"
+        # AL - Hazırlık formatı için özel işlem
+        elif pattern_index == 1:  # AL - Hazırlık pattern'i
+            grade = "Hazırlık"
+            section = grade_match.group(1)
+            class_type = grade_match.group(2).strip() if len(grade_match.groups()) > 1 else "ANADOLU LİSESİ"
         # Hazırlık sınıfı formatı için özel işlem
-        if "Hazırlık" in text:
+        elif "Hazırlık" in text and "FTL" not in text and "AL" not in text:
             grade = "Hazırlık"
             section = grade_match.group(1)
             class_type = "Hazırlık"
@@ -130,7 +146,7 @@ def extract_class_info(text, teacher_line=None):
             if "FTL" in text:
                 class_type = grade_match.group(3).strip() if len(grade_match.groups()) > 2 else "FEN BİLİMLERİ"
             elif "AL" in text:
-                class_type = grade_match.group(3).strip() if len(grade_match.groups()) > 2 else "ALANI YOK"
+                class_type = grade_match.group(3).strip() if len(grade_match.groups()) > 2 else "ANADOLU LİSESİ"
             elif "İlkokulu" in text:
                 class_type = "İlkokul"
             else:

@@ -31,6 +31,7 @@ Bu FastAPI servisi, E-Okul'dan alınan PDF formatındaki öğrenci listelerini J
 | 🎓 AL | "AL - 12. Sınıf / C Şubesi" |
 | 🏫 İlkokul | "4. Sınıf / D Şubesi" |
 | 🎈 Anaokulu | "Anaokulu 4 Yaş / A Şubesi" |
+| 🎈 Anasınıfı | "Anasınıfı / A Şubesi" |
 
 ## 🚀 Production Kurulum
 

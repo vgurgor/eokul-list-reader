@@ -92,7 +92,9 @@ def extract_class_info(text, teacher_line=None):
         # İlkokul/Normal format için pattern
         r'(\d+)\.\s*Sınıf\s*/\s*([A-Z])\s*Şubesi',
         # Anaokulu formatı için pattern
-        r'Anaokulu\s*(\d+)\s*Yaş\s*/\s*([A-Z])\s*Şubesi'
+        r'Anaokulu\s*(\d+)\s*Yaş\s*/\s*([A-Z])\s*Şubesi',
+        # Anasınıfı formatı için pattern
+        r'Anasınıfı\s*/\s*([A-Z])\s*Şubesi'
     ]
     
     teacher_pattern = r'Sınıf\s+Öğretmeni:\s*([A-ZÇĞİÖŞÜ\s]+)'
@@ -139,6 +141,11 @@ def extract_class_info(text, teacher_line=None):
             grade = f"Anaokulu {grade_match.group(1)} Yaş"
             section = grade_match.group(2)
             class_type = "Anaokulu"
+        # Anasınıfı formatı için özel işlem
+        elif "Anasınıfı" in text:
+            grade = "Anasınıfı"
+            section = grade_match.group(1)
+            class_type = "Anasınıfı"
         else:
             grade = grade_match.group(1)
             section = grade_match.group(2) if len(grade_match.groups()) > 1 else "A"

@@ -92,7 +92,7 @@ def extract_class_info(text, teacher_line=None):
         # Hazırlık sınıfı formatı için pattern
         r'Hazırlık\s*Sınıfı\s*/\s*([A-Z])\s*Şubesi',
         # İlkokul/Normal format için pattern
-        r'(\d+)\.\s*Sınıf\s*/\s*([A-Z])\s*Şubesi',
+        r'(\d+)\.\s*Sınıf\s*(?:\(([^)]*)\))?\s*/\s*([A-Z])\s*Şubesi',
         # Anaokulu formatı için pattern
         r'Anaokulu\s*(\d+)\s*Yaş\s*/\s*([A-Z])\s*Şubesi',
         # Anasınıfı formatı için pattern
@@ -149,17 +149,23 @@ def extract_class_info(text, teacher_line=None):
             section = grade_match.group(1)
             class_type = "Anasınıfı"
         else:
-            grade = grade_match.group(1)
-            section = grade_match.group(2) if len(grade_match.groups()) > 1 else "A"
-            # Okul türüne göre alan bilgisi
-            if "FTL" in text:
-                class_type = grade_match.group(3).strip() if len(grade_match.groups()) > 2 else "FEN BİLİMLERİ"
-            elif "AL" in text:
-                class_type = grade_match.group(3).strip() if len(grade_match.groups()) > 2 else "ANADOLU LİSESİ"
-            elif "İlkokulu" in text:
-                class_type = "İlkokul"
+            # İlkokul/Normal format için
+            if pattern_index == 5:  # İlkokul/Normal pattern'i
+                grade = grade_match.group(1)
+                class_type = grade_match.group(2).strip() if grade_match.group(2) else "Yabancı Dil Ağırlıklı"
+                section = grade_match.group(3)
             else:
-                class_type = "Yabancı Dil Ağırlıklı"
+                grade = grade_match.group(1)
+                section = grade_match.group(2) if len(grade_match.groups()) > 1 else "A"
+                # Okul türüne göre alan bilgisi
+                if "FTL" in text:
+                    class_type = grade_match.group(3).strip() if len(grade_match.groups()) > 2 else "FEN BİLİMLERİ"
+                elif "AL" in text:
+                    class_type = grade_match.group(3).strip() if len(grade_match.groups()) > 2 else "ANADOLU LİSESİ"
+                elif "İlkokulu" in text:
+                    class_type = "İlkokul"
+                else:
+                    class_type = "Yabancı Dil Ağırlıklı"
             
         logger.debug(f"Sınıf bilgisi bulundu: {grade} {section} Şubesi ({class_type})")
         return {

@@ -55,7 +55,7 @@ def extract_student_info(text_line):
     logger.debug(f"Öğrenci satırı inceleniyor: {text_line}")
     
     # Örnek satır: " 101 HÜMEYRA Kız KARTAL  1"
-    pattern = r'\s*(\d+)\s+([A-ZÇĞİÖŞÜ\s]+)\s+(Kız|Erkek)\s+([A-ZÇĞİÖŞÜ]+)\s+(\d+)'
+    pattern = r'\s*(\d+)\s+([A-ZÇĞİÖŞÜÂ\s]+)\s+(Kız|Erkek)\s+([A-ZÇĞİÖŞÜÂ]+)\s+(\d+)'
     match = re.search(pattern, text_line)
     if match:
         student_id, name, gender, surname, order_no = match.groups()
@@ -67,6 +67,8 @@ def extract_student_info(text_line):
             "surname": surname.strip(),
             "gender": "female" if gender == "Kız" else "male"
         }
+    else:
+        logger.warning(f"Öğrenci bilgisi için regex eşleşmedi: {text_line}")
     return None
 
 def extract_class_info(text, teacher_line=None):

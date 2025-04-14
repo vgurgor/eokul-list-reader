@@ -54,17 +54,21 @@ def extract_student_info(text_line):
         
     logger.debug(f"Öğrenci satırı inceleniyor: {text_line}")
     
-    # Örnek satır: " 101 HÜMEYRA Kız KARTAL  1"
-    pattern = r'\s*(\d+)\s+([A-ZÇĞİÖŞÜÂ\s]+)\s+(Kız|Erkek)\s+([A-ZÇĞİÖŞÜÂ]+)\s+(\d+)'
+    # İki kelimeli soyadları destekleyen güncellenmiş pattern
+    # Örnek satır: " 101 HÜMEYRA Kız KARTAL  1" veya " 101 HÜMEYRA Kız ELYASI NAFIEI  1" gibi
+    pattern = r'\s*(\d+)\s+([A-ZÇĞİÖŞÜÂ\s]+)\s+(Kız|Erkek)\s+([A-ZÇĞİÖŞÜÂ\s]+)\s+(\d+)'
     match = re.search(pattern, text_line)
     if match:
         student_id, name, gender, surname, order_no = match.groups()
+        # Baştaki ve sondaki boşlukları temizle
+        name = name.strip() 
+        surname = surname.strip()
         logger.debug(f"Öğrenci bilgisi bulundu: {order_no} - {name} {surname}")
         return {
             "orderNo": int(order_no),
             "studentId": student_id,
-            "name": name.strip(),
-            "surname": surname.strip(),
+            "name": name,
+            "surname": surname,
             "gender": "female" if gender == "Kız" else "male"
         }
     else:

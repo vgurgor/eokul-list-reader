@@ -1,5 +1,4 @@
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
 import aiohttp
 import tempfile
 import os
@@ -28,7 +27,10 @@ class APIResponse(BaseModel):
 
 @app.post("/process-pdf", response_model=APIResponse)
 async def process_pdf_url(request: PDFRequest):
+    """PDF URL'sini alıp işleyen endpoint"""
     try:
+        logger.info(f"PDF URL'si alındı: {request.pdf_url}")
+        
         # PDF dosyasını geçici olarak indir
         async with aiohttp.ClientSession() as session:
             async with session.get(request.pdf_url) as response:
@@ -39,10 +41,12 @@ async def process_pdf_url(request: PDFRequest):
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
                     temp_file.write(await response.read())
                     temp_path = temp_file.name
-
+        
+        logger.info(f"PDF başarıyla indirildi: {temp_path}")
+        
         try:
             # PDF'i işle
-            result = process_pdf(temp_path)
+            result = process_pdf(temp_path, request.pdf_url)
             
             # Geçici dosyayı sil
             os.unlink(temp_path)
@@ -72,6 +76,7 @@ async def process_pdf_url(request: PDFRequest):
 
 @app.get("/")
 async def root():
+    """Ana sayfa"""
     return {"message": "E-Okul PDF Okuyucu API'sine Hoş Geldiniz"}
 
 if __name__ == "__main__":

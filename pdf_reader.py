@@ -4,10 +4,113 @@ from datetime import datetime
 import re
 import logging
 import os
+from typing import Optional
+
+# Opsiyonel bağımlılıklar (fallback metin çıkarımı)
+try:
+    import fitz  # PyMuPDF
+except Exception:
+    fitz = None
+
+try:
+    from pdfminer.high_level import extract_text as pdfminer_extract_text
+except Exception:
+    pdfminer_extract_text = None
+
+try:
+    from pdf2image import convert_from_path
+except Exception:
+    convert_from_path = None
+
+try:
+    import pytesseract
+except Exception:
+    pytesseract = None
 
 # Loglama ayarları
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _looks_garbled(text: Optional[str]) -> bool:
+    """Metnin bozuk/PUA karakterleri yoğun içerip içermediğini tespit eder."""
+    if not text:
+        return True
+    text = text.strip()
+    if not text:
+        return True
+    total = len(text)
+    pua_count = sum(1 for ch in text if 0xE000 <= ord(ch) <= 0xF8FF)
+    control_count = sum(1 for ch in text if ord(ch) < 32 and ch not in "\n\r\t")
+    ratio = (pua_count + control_count) / max(total, 1)
+    return ratio > 0.2
+
+
+def extract_text_with_fallback(file_path: str, page_index: int, reader: Optional[PdfReader] = None) -> str:
+    """Sayfa metnini PyPDF2 -> PyMuPDF -> pdfminer sırası ile dener."""
+    # 1) PyPDF2
+    try:
+        if reader is not None:
+            try:
+                text = reader.pages[page_index].extract_text()
+            except Exception:
+                text = None
+            if text and not _looks_garbled(text):
+                return text
+    except Exception as e:
+        logger.debug(f"PyPDF2 metin çıkarımı hatası (sayfa {page_index+1}): {e}")
+
+    # 2) PyMuPDF
+    if fitz is not None:
+        try:
+            with fitz.open(file_path) as doc:
+                if 0 <= page_index < doc.page_count:
+                    page = doc.load_page(page_index)
+                    text = page.get_text("text")
+                    if text and not _looks_garbled(text):
+                        return text
+        except Exception as e:
+            logger.debug(f"PyMuPDF metin çıkarımı hatası (sayfa {page_index+1}): {e}")
+
+    # 3) pdfminer
+    if pdfminer_extract_text is not None:
+        try:
+            text = pdfminer_extract_text(file_path, page_numbers=[page_index])
+            if text and not _looks_garbled(text):
+                return text
+        except Exception as e:
+            logger.debug(f"pdfminer metin çıkarımı hatası (sayfa {page_index+1}): {e}")
+
+    # 4) OCR (pdf2image + pytesseract)
+    if convert_from_path is not None and pytesseract is not None and os.path.exists(file_path):
+        try:
+            images = convert_from_path(
+                file_path,
+                first_page=page_index + 1,
+                last_page=page_index + 1,
+                dpi=300,
+                fmt="png",
+                poppler_path="/opt/homebrew/bin" if os.path.exists("/opt/homebrew/bin/pdftoppm") else None
+            )
+            if images:
+                # Türkçe + İngilizce dene; tur dil verisi yoksa eng'e düşer
+                lang = "tur+eng" if os.system("which tesseract > /dev/null 2>&1") == 0 else None
+                try:
+                    ocr_text = pytesseract.image_to_string(images[0], lang=lang or "eng")
+                except Exception:
+                    ocr_text = pytesseract.image_to_string(images[0])
+                if ocr_text and not _looks_garbled(ocr_text):
+                    return ocr_text
+        except Exception as e:
+            logger.debug(f"OCR metin çıkarımı hatası (sayfa {page_index+1}): {e}")
+
+    # Olmadıysa, en azından PyPDF2 çıktısını döndür (bozuk olabilir)
+    try:
+        if reader is not None:
+            return reader.pages[page_index].extract_text() or ""
+    except Exception:
+        pass
+    return ""
 
 def extract_school_info(text_lines):
     """Okul bilgilerini satırlardan ayıklar"""
@@ -49,14 +152,26 @@ def extract_student_info(text_line):
         
     logger.debug(f"Öğrenci satırı inceleniyor: {text_line}")
     
-    # İki kelimeli soyadları destekleyen güncellenmiş pattern
-    # Örnek satır: " 101 HÜMEYRA Kız KARTAL  1" veya " 101 HÜMEYRA Kız ELYASI NAFIEI  1" gibi
-    pattern = r'\s*(\d+)\s+([A-ZÇĞİÖŞÜÂ\s]+)\s+(Kız|Erkek)\s+([A-ZÇĞİÖŞÜÂ\s]+)\s+(\d+)'
-    match = re.search(pattern, text_line)
-    if match:
-        student_id, name, gender, surname, order_no = match.groups()
-        # Baştaki ve sondaki boşlukları temizle
-        name = name.strip() 
+    # OCR ve farklı PDF düzenlerini desteklemek için birden fazla pattern dene
+    patterns = [
+        # OCR çıktısı (E-Okul) tipik: "S.No Öğrenci No Adı Soyadı Cinsiyeti" -> "1 829 ASLI SUBAY Kız"
+        # orderNo, studentId, name, surname, gender
+        r"^\s*(\d+)\s+(\d+)\s+([A-ZÇĞİÖŞÜÂ]+(?:\s+[A-ZÇĞİÖŞÜÂ]+)*)\s+([A-ZÇĞİÖŞÜÂ]+(?:\s+[A-ZÇĞİÖŞÜÂ]+)*)\s+(Kız|Erkek)\s*$",
+        # Alternatif eski düzen: "829 ASLI Kız SUBAY 1" -> studentId, name, gender, surname, orderNo
+        r"^\s*(\d+)\s+([A-ZÇĞİÖŞÜÂ]+(?:\s+[A-ZÇĞİÖŞÜÂ]+)*)\s+(Kız|Erkek)\s+([A-ZÇĞİÖŞÜÂ]+(?:\s+[A-ZÇĞİÖŞÜÂ]+)*)\s+(\d+)\s*$",
+    ]
+
+    for idx, pattern in enumerate(patterns):
+        match = re.search(pattern, text_line)
+        if not match:
+            continue
+        groups = match.groups()
+        if idx == 0:
+            order_no, student_id, name, surname, gender = groups
+        else:
+            student_id, name, gender, surname, order_no = groups
+
+        name = name.strip()
         surname = surname.strip()
         logger.debug(f"Öğrenci bilgisi bulundu: {order_no} - {name} {surname}")
         return {
@@ -64,10 +179,10 @@ def extract_student_info(text_line):
             "studentId": student_id,
             "name": name,
             "surname": surname,
-            "gender": "female" if gender == "Kız" else "male"
+            "gender": "female" if gender == "Kız" else "male",
         }
-    else:
-        logger.warning(f"Öğrenci bilgisi için regex eşleşmedi: {text_line}")
+
+    logger.warning(f"Öğrenci bilgisi için regex eşleşmedi: {text_line}")
     return None
 
 def extract_class_info(text, teacher_line=None):
@@ -239,7 +354,7 @@ def process_anaokulu_pdf(reader, pdf_url=None):
     full_text = ""
     for page_num, page in enumerate(reader.pages):
         try:
-            text = page.extract_text()
+            text = extract_text_with_fallback(reader.stream.name if hasattr(reader, 'stream') and hasattr(reader.stream, 'name') else pdf_url or "", page_num, reader)
             if text:
                 full_text += text
         except Exception as e:
@@ -343,7 +458,7 @@ def process_pdf(file_path, pdf_url=None):
         # API üzerinden gelen geçici dosyalarda dosya adı kontrol edilemez
         # Bu durumda, dosya içeriğine bakalım
         try:
-            first_page_text = reader.pages[0].extract_text().upper()
+            first_page_text = extract_text_with_fallback(file_path, 0, reader).upper()
             if "ANAOKULU" in first_page_text or "ANA OKULU" in first_page_text or "UMRANIYE" in first_page_text:
                 is_anaokulu = True
                 logger.info("PDF içeriğinde anaokulu/umraniye kelimesi tespit edildi")
@@ -376,7 +491,7 @@ def process_pdf(file_path, pdf_url=None):
         for page_num, page in enumerate(reader.pages):
             try:
                 logger.info(f"Sayfa {page_num + 1} işleniyor...")
-                text = page.extract_text()
+                text = extract_text_with_fallback(file_path, page_num, reader)
                 
                 if not text:
                     logger.warning(f"Sayfa {page_num + 1}'den metin çıkarılamadı!")

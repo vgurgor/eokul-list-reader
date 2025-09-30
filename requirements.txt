@@ -5,3 +5,7 @@ uvicorn==0.27.1
 python-multipart==0.0.9
 requests==2.31.0
 aiohttp==3.9.3 
+PyMuPDF==1.26.4
+pdfminer.six==20250506
+pdf2image==1.17.0
+pytesseract==0.3.13

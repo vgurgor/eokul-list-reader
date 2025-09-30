@@ -106,6 +106,59 @@ server {
 }
 ```
 
+## 🔁 Sunucuda Güncelleme (Deploy/Update)
+
+### 1) Sunucuya bağlan
+```bash
+ssh your-user@your-server
+```
+
+### 2) Proje dizinine geç ve son değişiklikleri çek
+```bash
+cd /opt/eokul-pdf-reader
+sudo -u www-data git fetch --all --prune
+sudo -u www-data git reset --hard origin/main
+```
+
+### 3) Sanal ortamı etkinleştir ve bağımlılıkları güncelle
+```bash
+source venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+OCR için sistem bağımlılıkları (gerekirse):
+```bash
+sudo apt update
+sudo apt install -y tesseract-ocr tesseract-ocr-tur poppler-utils
+tesseract --list-langs | grep -E "tur|eng"
+```
+
+### 4) Servisi yeniden başlat
+```bash
+sudo systemctl restart eokul-pdf-reader
+```
+
+Unit dosyasında değişiklik yaptıysanız:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart eokul-pdf-reader
+```
+
+### 5) Durumu ve logları kontrol et
+```bash
+sudo systemctl status eokul-pdf-reader --no-pager
+sudo journalctl -u eokul-pdf-reader -n 200 --no-pager
+```
+
+### 6) Hızlı sağlık kontrolü
+```bash
+curl -s http://127.0.0.1:8000/ | jq .
+curl -s -X POST http://127.0.0.1:8000/process-pdf \
+  -H 'Content-Type: application/json' \
+  -d '{"pdf_url":"https://example.com/sample.pdf"}' | jq .
+```
+
 ## 📝 Örnek Kullanım
 
 ### 🐍 Python

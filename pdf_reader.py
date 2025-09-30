@@ -4,6 +4,7 @@ from datetime import datetime
 import re
 import logging
 import os
+import shutil
 from typing import Optional
 
 # Opsiyonel bağımlılıklar (fallback metin çıkarımı)
@@ -42,12 +43,65 @@ def _looks_garbled(text: Optional[str]) -> bool:
     total = len(text)
     pua_count = sum(1 for ch in text if 0xE000 <= ord(ch) <= 0xF8FF)
     control_count = sum(1 for ch in text if ord(ch) < 32 and ch not in "\n\r\t")
-    ratio = (pua_count + control_count) / max(total, 1)
-    return ratio > 0.2
+    replacement_count = text.count("\uFFFD")
+    # Türkçe alfabe + rakam + boşluk ve sık noktalama harici karakter oranı
+    allowed_chars = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZçÇğĞıİöÖşŞüÜ0123456789 -_/().,:;'%\n\r\t")
+    non_allowed = sum(1 for ch in text if ch not in allowed_chars)
+    ratio = (pua_count + control_count + replacement_count + non_allowed) / max(total, 1)
+    # Daha agresif eşik: metnin belirgin kısmı tanımsız ise garbled say
+    return ratio > 0.15
 
 
-def extract_text_with_fallback(file_path: str, page_index: int, reader: Optional[PdfReader] = None) -> str:
-    """Sayfa metnini PyPDF2 -> PyMuPDF -> pdfminer sırası ile dener."""
+def extract_text_with_fallback(file_path: str, page_index: int, reader: Optional[PdfReader] = None, force_ocr: bool = False) -> str:
+    """Sayfa metnini PyPDF2 -> PyMuPDF -> pdfminer -> OCR sırası ile dener.
+    force_ocr=True ise doğrudan OCR uygular."""
+    if force_ocr:
+        # OCR'a zorla
+        if convert_from_path is not None and pytesseract is not None and os.path.exists(file_path):
+            try:
+                try:
+                    pdftoppm_path = shutil.which("pdftoppm")
+                    if not pdftoppm_path:
+                        for candidate in [
+                            "/usr/bin/pdftoppm",
+                            "/usr/local/bin/pdftoppm",
+                            "/opt/homebrew/bin/pdftoppm",
+                            "/snap/bin/pdftoppm",
+                        ]:
+                            if os.path.exists(candidate):
+                                pdftoppm_path = candidate
+                                break
+                    poppler_dir = os.path.dirname(pdftoppm_path) if pdftoppm_path else None
+                except Exception:
+                    poppler_dir = None
+                logger.info(f"OCR (force) başlıyor: sayfa={page_index+1}, poppler_dir={poppler_dir}")
+                images = convert_from_path(
+                    file_path,
+                    first_page=page_index + 1,
+                    last_page=page_index + 1,
+                    dpi=300,
+                    fmt="png",
+                    poppler_path=poppler_dir
+                )
+                if images:
+                    logger.info(f"OCR (force) görüntü üretildi: sayfa={page_index+1}")
+                    ocr_lang = "eng"
+                    try:
+                        available_langs = pytesseract.get_languages(config="")
+                        if isinstance(available_langs, list) and "tur" in available_langs:
+                            ocr_lang = "tur+eng"
+                    except Exception:
+                        pass
+                    try:
+                        logger.info(f"OCR (force) tesseract çalışıyor: lang={ocr_lang}")
+                        ocr_text = pytesseract.image_to_string(images[0], lang=ocr_lang)
+                    except Exception:
+                        ocr_text = pytesseract.image_to_string(images[0])
+                    logger.info(f"OCR (force) tamamlandı: sayfa={page_index+1}, uzunluk={len(ocr_text or '')}")
+                    return ocr_text or ""
+            except Exception as e:
+                logger.debug(f"OCR (force) metin çıkarımı hatası (sayfa {page_index+1}): {e}")
+        return ""
     # 1) PyPDF2
     try:
         if reader is not None:
@@ -84,21 +138,47 @@ def extract_text_with_fallback(file_path: str, page_index: int, reader: Optional
     # 4) OCR (pdf2image + pytesseract)
     if convert_from_path is not None and pytesseract is not None and os.path.exists(file_path):
         try:
+            # Poppler yolunu otomatik tespit et (PATH'e bağımlı kalma)
+            try:
+                pdftoppm_path = shutil.which("pdftoppm")
+                if not pdftoppm_path:
+                    for candidate in [
+                        "/usr/bin/pdftoppm",
+                        "/usr/local/bin/pdftoppm",
+                        "/opt/homebrew/bin/pdftoppm",
+                        "/snap/bin/pdftoppm",
+                    ]:
+                        if os.path.exists(candidate):
+                            pdftoppm_path = candidate
+                            break
+                poppler_dir = os.path.dirname(pdftoppm_path) if pdftoppm_path else None
+            except Exception:
+                poppler_dir = None
+            logger.info(f"OCR fallback başlıyor: sayfa={page_index+1}, poppler_dir={poppler_dir}")
             images = convert_from_path(
                 file_path,
                 first_page=page_index + 1,
                 last_page=page_index + 1,
                 dpi=300,
                 fmt="png",
-                poppler_path="/opt/homebrew/bin" if os.path.exists("/opt/homebrew/bin/pdftoppm") else None
+                poppler_path=poppler_dir
             )
             if images:
-                # Türkçe + İngilizce dene; tur dil verisi yoksa eng'e düşer
-                lang = "tur+eng" if os.system("which tesseract > /dev/null 2>&1") == 0 else None
+                logger.info(f"OCR fallback görüntü üretildi: sayfa={page_index+1}")
+                # Türkçe + İngilizce dene; TR dili yoksa ENG'e düş
+                ocr_lang = "eng"
                 try:
-                    ocr_text = pytesseract.image_to_string(images[0], lang=lang or "eng")
+                    available_langs = pytesseract.get_languages(config="")
+                    if isinstance(available_langs, list) and "tur" in available_langs:
+                        ocr_lang = "tur+eng"
+                except Exception:
+                    pass
+                try:
+                    logger.info(f"OCR fallback tesseract çalışıyor: lang={ocr_lang}")
+                    ocr_text = pytesseract.image_to_string(images[0], lang=ocr_lang)
                 except Exception:
                     ocr_text = pytesseract.image_to_string(images[0])
+                logger.info(f"OCR fallback tamamlandı: sayfa={page_index+1}, uzunluk={len(ocr_text or '')}")
                 if ocr_text and not _looks_garbled(ocr_text):
                     return ocr_text
         except Exception as e:
@@ -458,7 +538,8 @@ def process_pdf(file_path, pdf_url=None):
         # API üzerinden gelen geçici dosyalarda dosya adı kontrol edilemez
         # Bu durumda, dosya içeriğine bakalım
         try:
-            first_page_text = extract_text_with_fallback(file_path, 0, reader).upper()
+            # Canlıda encoding farklılıklarında doğrudan OCR denesin (ilk sayfa)
+            first_page_text = extract_text_with_fallback(file_path, 0, reader, force_ocr=True).upper()
             if "ANAOKULU" in first_page_text or "ANA OKULU" in first_page_text or "UMRANIYE" in first_page_text:
                 is_anaokulu = True
                 logger.info("PDF içeriğinde anaokulu/umraniye kelimesi tespit edildi")
@@ -491,7 +572,13 @@ def process_pdf(file_path, pdf_url=None):
         for page_num, page in enumerate(reader.pages):
             try:
                 logger.info(f"Sayfa {page_num + 1} işleniyor...")
+                # Önce normal metin, bozuksa OCR'a düşecek (garbled oranını kontrol ederek)
                 text = extract_text_with_fallback(file_path, page_num, reader)
+                if not text or _looks_garbled(text):
+                    logger.info(f"Sayfa {page_num + 1}: metin bozuk veya boş, OCR deneniyor")
+                    ocr_text = extract_text_with_fallback(file_path, page_num, reader, force_ocr=True)
+                    if ocr_text and (not _looks_garbled(ocr_text)):
+                        text = ocr_text
                 
                 if not text:
                     logger.warning(f"Sayfa {page_num + 1}'den metin çıkarılamadı!")

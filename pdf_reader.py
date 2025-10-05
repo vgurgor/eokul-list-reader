@@ -40,6 +40,12 @@ def _looks_garbled(text: Optional[str]) -> bool:
     text = text.strip()
     if not text:
         return True
+    # Sık görülen bozuk çıkarım paterni: (cid:XX) veya benzerleri
+    tl = text.lower()
+    if "(cid:" in tl or "cid:" in tl:
+        return True
+    if re.search(r"\(cid:\d+\)", text):
+        return True
     total = len(text)
     pua_count = sum(1 for ch in text if 0xE000 <= ord(ch) <= 0xF8FF)
     control_count = sum(1 for ch in text if ord(ch) < 32 and ch not in "\n\r\t")

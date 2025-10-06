@@ -58,6 +58,29 @@ def _looks_garbled(text: Optional[str]) -> bool:
     return ratio > 0.15
 
 
+def _normalize_turkish(text: str) -> str:
+    """Türkçe diakritikleri kaldırıp büyük harfe çevirir."""
+    if not text:
+        return ""
+    trans = str.maketrans({
+        "ç": "c", "ğ": "g", "ı": "i", "ö": "o", "ş": "s", "ü": "u",
+        "Ç": "C", "Ğ": "G", "İ": "I", "I": "I", "Ö": "O", "Ş": "S", "Ü": "U",
+    })
+    return text.translate(trans).upper()
+
+
+def _looks_fragmented(text: Optional[str]) -> bool:
+    """Metin satırlarının aşırı parçalandığı (çok kısa satırların yoğun olduğu) durumları tespit eder."""
+    if not text:
+        return True
+    lines = [l.strip() for l in text.split('\n') if l.strip()]
+    if not lines:
+        return True
+    short = sum(1 for l in lines if len(l) <= 2)
+    # Çok kısa satır oranı yüksekse parçalı kabul et
+    return (short / max(len(lines), 1)) > 0.35
+
+
 def extract_text_with_fallback(file_path: str, page_index: int, reader: Optional[PdfReader] = None, force_ocr: bool = False) -> str:
     """Sayfa metnini PyPDF2 -> PyMuPDF -> pdfminer -> OCR sırası ile dener.
     force_ocr=True ise doğrudan OCR uygular."""
@@ -100,7 +123,11 @@ def extract_text_with_fallback(file_path: str, page_index: int, reader: Optional
                         pass
                     try:
                         logger.info(f"OCR (force) tesseract çalışıyor: lang={ocr_lang}")
-                        ocr_text = pytesseract.image_to_string(images[0], lang=ocr_lang)
+                        ocr_text = pytesseract.image_to_string(
+                            images[0],
+                            lang=ocr_lang,
+                            config="--oem 1 --psm 4 -c preserve_interword_spaces=1",
+                        )
                     except Exception:
                         ocr_text = pytesseract.image_to_string(images[0])
                     logger.info(f"OCR (force) tamamlandı: sayfa={page_index+1}, uzunluk={len(ocr_text or '')}")
@@ -181,7 +208,11 @@ def extract_text_with_fallback(file_path: str, page_index: int, reader: Optional
                     pass
                 try:
                     logger.info(f"OCR fallback tesseract çalışıyor: lang={ocr_lang}")
-                    ocr_text = pytesseract.image_to_string(images[0], lang=ocr_lang)
+                    ocr_text = pytesseract.image_to_string(
+                        images[0],
+                        lang=ocr_lang,
+                        config="--oem 1 --psm 4 -c preserve_interword_spaces=1",
+                    )
                 except Exception:
                     ocr_text = pytesseract.image_to_string(images[0])
                 logger.info(f"OCR fallback tamamlandı: sayfa={page_index+1}, uzunluk={len(ocr_text or '')}")
@@ -552,9 +583,7 @@ def process_pdf(file_path, pdf_url=None):
         except Exception as e:
             logger.warning(f"PDF içeriği kontrol edilirken hata: {str(e)}")
         
-        # Anaokulu içeriği özel olarak işle
-        if is_anaokulu:
-            return process_anaokulu_pdf(reader, pdf_url)
+
 
         # Normal PDF işleme
         result = {
@@ -580,10 +609,10 @@ def process_pdf(file_path, pdf_url=None):
                 logger.info(f"Sayfa {page_num + 1} işleniyor...")
                 # Önce normal metin, bozuksa OCR'a düşecek (garbled oranını kontrol ederek)
                 text = extract_text_with_fallback(file_path, page_num, reader)
-                if not text or _looks_garbled(text):
+                if not text or _looks_garbled(text) or _looks_fragmented(text):
                     logger.info(f"Sayfa {page_num + 1}: metin bozuk veya boş, OCR deneniyor")
                     ocr_text = extract_text_with_fallback(file_path, page_num, reader, force_ocr=True)
-                    if ocr_text and (not _looks_garbled(ocr_text)):
+                    if ocr_text and (not _looks_garbled(ocr_text)) and (not _looks_fragmented(ocr_text)):
                         text = ocr_text
                 
                 if not text:

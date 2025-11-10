@@ -312,6 +312,8 @@ def extract_class_info(text, teacher_line=None):
     
     # Farklı formatlar için regex pattern'ları
     patterns = [
+        # Ana Sınıfı formatı (ör: "Ana Sınıfı / A Şubesi Sınıf Listesi")
+        r'Ana\s*Sınıfı\s*/\s*([A-Z])\s*Şubesi(?:\s*Sınıf\s*Listesi)?',
         # FTL - Hazırlık formatı için pattern
         r'FTL\s*-\s*Hazırlık\s*Sınıfı\s*/\s*([A-Z])\s*Şubesi\s*\(([^)]*)\)',
         # AL - Hazırlık formatı için pattern
@@ -357,15 +359,20 @@ def extract_class_info(text, teacher_line=None):
     
     if grade_match:
         # FTL - Hazırlık formatı için özel işlem
-        if pattern_index == 0:  # FTL - Hazırlık pattern'i
+        if pattern_index == 1:  # FTL - Hazırlık pattern'i (listeye bir regex eklendiği için indeks +1)
             grade = "Hazırlık"
             section = grade_match.group(1)
             class_type = grade_match.group(2).strip() if len(grade_match.groups()) > 1 else "FEN BİLİMLERİ"
         # AL - Hazırlık formatı için özel işlem
-        elif pattern_index == 1:  # AL - Hazırlık pattern'i
+        elif pattern_index == 2:  # AL - Hazırlık pattern'i
             grade = "Hazırlık"
             section = grade_match.group(1)
             class_type = grade_match.group(2).strip() if len(grade_match.groups()) > 1 else "ANADOLU LİSESİ"
+        # Ana Sınıfı formatı için özel işlem
+        elif "Ana Sınıfı" in text or "ANA SINIFI" in text.upper() or pattern_index == 0:
+            grade = "Anasınıfı"
+            section = grade_match.group(1)
+            class_type = "Anasınıfı"
         # Hazırlık sınıfı formatı için özel işlem
         elif "Hazırlık" in text and "FTL" not in text and "AL" not in text:
             grade = "Hazırlık"
@@ -388,7 +395,7 @@ def extract_class_info(text, teacher_line=None):
             class_type = "Anasınıfı"
         else:
             # İlkokul/Normal format için
-            if pattern_index == 5:  # İlkokul/Normal pattern'i
+            if pattern_index == 6:  # İlkokul/Normal pattern'i (indeks +1 kaydı)
                 grade = grade_match.group(1)
                 class_type = grade_match.group(2).strip() if grade_match.group(2) else "Yabancı Dil Ağırlıklı"
                 section = grade_match.group(3)

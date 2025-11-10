@@ -52,10 +52,11 @@ async def process_pdf_url(request: PDFRequest):
             os.unlink(temp_path)
             
             if not result["success"]:
+                # Başarısızlıkta da tanılama verilerini döndür
                 return APIResponse(
                     status=False,
-                    message=result["message"],
-                    data=None
+                    message=result.get("message", "İşleme hatası"),
+                    data=result.get("data", {})
                 )
             
             return APIResponse(

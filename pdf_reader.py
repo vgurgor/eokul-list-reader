@@ -416,11 +416,10 @@ def extract_class_info(text, teacher_line=None):
 
 def save_current_class(current_class, students, result):
     """Mevcut sınıfı sonuçlara ekler"""
-    if current_class and students:
+    if current_class:
         total = len(students)
         females = sum(1 for s in students if s["gender"] == "female")
         males = total - females
-        
         current_class["students"] = students
         current_class["statistics"] = {
             "totalStudents": total,
@@ -495,44 +494,6 @@ def process_anaokulu_pdf(reader, pdf_url=None):
     
     logger.info(f"Toplam {len(student_data)} öğrenci numarası bulundu")
     
-    # Bu PDF için öğrencileri manuel olarak ekliyoruz
-    # Ümraniye Anaokulu için özel listesi
-    students_list = [
-        {"orderNo": 1, "studentId": "1", "name": "ÖMER", "surname": "KARADAĞ", "gender": "male"},
-        {"orderNo": 2, "studentId": "2", "name": "EYMEN", "surname": "UZUN", "gender": "male"},
-        {"orderNo": 3, "studentId": "3", "name": "İBRAHİM", "surname": "BAHADIR", "gender": "male"},
-        {"orderNo": 4, "studentId": "4", "name": "MUSTAFA YUSUF", "surname": "TOPUZ", "gender": "male"},
-        {"orderNo": 5, "studentId": "5", "name": "MUHAMMED ALİ", "surname": "BALIKÇI", "gender": "male"},
-        {"orderNo": 6, "studentId": "6", "name": "ELİF ZEYNEP", "surname": "DEMİRCİ", "gender": "female"},
-        {"orderNo": 7, "studentId": "7", "name": "ZEYNEP", "surname": "YILMAZ", "gender": "female"},
-        {"orderNo": 8, "studentId": "8", "name": "AYŞE", "surname": "KAYA", "gender": "female"},
-        {"orderNo": 9, "studentId": "9", "name": "ELA", "surname": "ÇELİK", "gender": "female"},
-        {"orderNo": 10, "studentId": "10", "name": "MEHMET", "surname": "ŞAHIN", "gender": "male"},
-        {"orderNo": 11, "studentId": "11", "name": "AHMET", "surname": "YILDIZ", "gender": "male"},
-        {"orderNo": 12, "studentId": "12", "name": "ZEHRA", "surname": "ARSLAN", "gender": "female"},
-        {"orderNo": 13, "studentId": "13", "name": "EMİR", "surname": "GÜNEŞ", "gender": "male"},
-        {"orderNo": 14, "studentId": "14", "name": "ASYA", "surname": "ÖZTÜRK", "gender": "female"},
-        {"orderNo": 15, "studentId": "15", "name": "HİRA NUR", "surname": "KORKMAZ", "gender": "female"},
-        {"orderNo": 16, "studentId": "16", "name": "YUSUF", "surname": "AKTAŞ", "gender": "male"},
-        {"orderNo": 17, "studentId": "17", "name": "MERYEM", "surname": "AYDIN", "gender": "female"},
-        {"orderNo": 18, "studentId": "18", "name": "ÖYKÜ", "surname": "DEMİR", "gender": "female"},
-        {"orderNo": 19, "studentId": "19", "name": "MUHAMMED", "surname": "DOĞAN", "gender": "male"},
-        {"orderNo": 20, "studentId": "20", "name": "HÜMEYRA", "surname": "ERÇETİN", "gender": "female"},
-        {"orderNo": 21, "studentId": "21", "name": "BUĞRA", "surname": "YILDIZ", "gender": "male"},
-        {"orderNo": 22, "studentId": "22", "name": "DERİN", "surname": "YALÇIN", "gender": "female"},
-        {"orderNo": 23, "studentId": "23", "name": "MUHAMMED EMİR", "surname": "GÜLER", "gender": "male"},
-        {"orderNo": 24, "studentId": "24", "name": "DEFNE", "surname": "KILIÇ", "gender": "female"},
-        {"orderNo": 25, "studentId": "25", "name": "AZRA", "surname": "ŞİMŞEK", "gender": "female"},
-        {"orderNo": 26, "studentId": "26", "name": "KEREM", "surname": "KAPLAN", "gender": "male"},
-        {"orderNo": 27, "studentId": "27", "name": "İKRA", "surname": "ÖZKAN", "gender": "female"},
-        {"orderNo": 28, "studentId": "28", "name": "EBRAR", "surname": "ASLAN", "gender": "female"},
-        {"orderNo": 29, "studentId": "29", "name": "YİĞİT", "surname": "ACAR", "gender": "male"},
-        {"orderNo": 30, "studentId": "30", "name": "EYMEN", "surname": "ÇOLAK", "gender": "male"},
-        {"orderNo": 31, "studentId": "31", "name": "ASLI", "surname": "BULUT", "gender": "female"},
-        {"orderNo": 32, "studentId": "32", "name": "MERT", "surname": "SARI", "gender": "male"},
-        {"orderNo": 33, "studentId": "33", "name": "ELA NAZ", "surname": "KOÇAK", "gender": "female"},
-        {"orderNo": 34, "studentId": "34", "name": "HASAN", "surname": "AKSOY", "gender": "male"}
-    ]
     
     # Cinsiyet sayılarını hesapla
     female_count = sum(1 for s in students_list if s["gender"] == "female")
@@ -595,7 +556,15 @@ def process_pdf(file_path, pdf_url=None):
                 "schoolInfo": None,
                 "classes": []
             },
-            "errors": []
+            "errors": [],
+            "diagnostics": {
+                "classHeaderCandidates": [],
+                "teacherLineCandidates": [],
+                "studentRegexHits": 0,
+                "studentRegexMisses": 0,
+                "studentRegexMissSamples": [],
+                "pages": []
+            }
         }
 
         current_class = None
@@ -609,50 +578,95 @@ def process_pdf(file_path, pdf_url=None):
                 logger.info(f"Sayfa {page_num + 1} işleniyor...")
                 # Önce normal metin, bozuksa OCR'a düşecek (garbled oranını kontrol ederek)
                 text = extract_text_with_fallback(file_path, page_num, reader)
+                ocr_attempted = False
+                ocr_used = False
                 if not text or _looks_garbled(text) or _looks_fragmented(text):
                     logger.info(f"Sayfa {page_num + 1}: metin bozuk veya boş, OCR deneniyor")
+                    ocr_attempted = True
                     ocr_text = extract_text_with_fallback(file_path, page_num, reader, force_ocr=True)
                     if ocr_text and (not _looks_garbled(ocr_text)) and (not _looks_fragmented(ocr_text)):
                         text = ocr_text
+                        ocr_used = True
                 
                 if not text:
                     logger.warning(f"Sayfa {page_num + 1}'den metin çıkarılamadı!")
+                    result["diagnostics"]["pages"].append({
+                        "page": page_num + 1,
+                        "lineCount": 0,
+                        "ocrAttempted": ocr_attempted,
+                        "ocrUsed": ocr_used,
+                        "foundClassHeader": False,
+                        "studentsAdded": 0
+                    })
                     continue
                     
                 logger.debug(f"Sayfa {page_num + 1} metin içeriği:\n{text}")
                 lines = [line.strip() for line in text.split('\n') if line.strip()]
                 logger.debug(f"Sayfa {page_num + 1}'de {len(lines)} satır bulundu")
+                page_students_added = 0
+                found_class_header_this_page = False
                 
                 # İlk sayfadan okul bilgilerini al
                 if page_num == 0 and not school_info_found:
                     result["data"]["schoolInfo"] = extract_school_info(lines)
                     school_info_found = True
                 
-                # Önce sınıf ve öğretmen bilgilerini topla
-                class_info_found = False
+                # Sınıf ve öğretmen bilgilerini topla (daha esnek)
                 for line in lines:
-                    if "Sınıf" in line and "Şubesi" in line and "Listesi" in line:
-                        class_header = line
-                        class_info_found = True
-                    elif "Sınıf Öğretmeni:" in line and class_info_found:
-                        current_teacher = line
-                        # Yeni sınıf başlat
+                    # Tanılama: potansiyel başlık/öğretmen satırlarını topla
+                    if re.search(r"\bSınıf\b", line, flags=re.IGNORECASE) or \
+                       re.search(r"\bŞubesi\b", line, flags=re.IGNORECASE) or \
+                       re.search(r"\bListesi\b", line, flags=re.IGNORECASE):
+                        if len(result["diagnostics"]["classHeaderCandidates"]) < 20:
+                            result["diagnostics"]["classHeaderCandidates"].append(line)
+                    if "Sınıf Öğretmeni:" in line:
+                        if len(result["diagnostics"]["teacherLineCandidates"]) < 20:
+                            result["diagnostics"]["teacherLineCandidates"].append(line)
+
+                    # 1) Her satırı potansiyel sınıf başlığı olarak dene
+                    class_info_candidate = extract_class_info(line)
+                    if class_info_candidate:
                         if current_class:
                             save_current_class(current_class, students, result)
                             students = []
-                        
-                        class_info = extract_class_info(class_header, current_teacher)
-                        if class_info:
-                            current_class = {"classInfo": class_info}
-                            class_info_found = False
-                            continue
+                        current_class = {"classInfo": class_info_candidate}
+                        class_header = line
+                        found_class_header_this_page = True
+                        continue
+                    # 2) Öğretmen bilgisi satırı ise mevcut sınıfa ekle
+                    if "Sınıf Öğretmeni:" in line and current_class and "classInfo" in current_class:
+                        teacher_match = re.search(r'Sınıf\s+Öğretmeni:\s*([A-ZÇĞİÖŞÜ\s]+)', line)
+                        if teacher_match:
+                            teacher_name = teacher_match.group(1).strip()
+                            teachers = current_class["classInfo"].get("teachers", [])
+                            if teacher_name and not any(t.get("name") == teacher_name for t in teachers):
+                                teachers.append({"name": teacher_name, "role": "Sınıf Öğretmeni"})
+                                current_class["classInfo"]["teachers"] = teachers
+                        continue
                 
                 # Sonra öğrenci bilgilerini işle
                 for line in lines:
                     student = extract_student_info(line)
                     if student:
                         students.append(student)
+                        result["diagnostics"]["studentRegexHits"] += 1
+                        page_students_added += 1
+                    else:
+                        # Olası öğrenci satırını ama regex kaçırmışsa örnekle
+                        if (("Kız" in line or "Erkek" in line) or re.search(r"\b\d{1,4}\b", line)) and len(result["diagnostics"]["studentRegexMissSamples"]) < 25:
+                            result["diagnostics"]["studentRegexMissSamples"].append(line)
+                            result["diagnostics"]["studentRegexMisses"] += 1
                         
+                # Sayfa tanılama özeti
+                result["diagnostics"]["pages"].append({
+                    "page": page_num + 1,
+                    "lineCount": len(lines),
+                    "ocrAttempted": ocr_attempted,
+                    "ocrUsed": ocr_used,
+                    "foundClassHeader": found_class_header_this_page,
+                    "studentsAdded": page_students_added
+                })
+
             except Exception as e:
                 logger.error(f"Sayfa {page_num + 1} işlenirken hata: {str(e)}")
                 result["errors"].append({
@@ -673,7 +687,21 @@ def process_pdf(file_path, pdf_url=None):
         if not result["data"]["classes"]:
             logger.error("Hiç sınıf bilgisi bulunamadı!")
             result["success"] = False
-            result["message"] = "Sınıf bilgileri bulunamadı"
+            # Daha açıklayıcı mesaj hazırla
+            reason_parts = []
+            if not result["diagnostics"]["classHeaderCandidates"]:
+                reason_parts.append("sınıf başlığına benzer satır bulunamadı")
+            if result["diagnostics"]["studentRegexHits"] == 0 and result["diagnostics"]["studentRegexMisses"] > 0:
+                reason_parts.append("öğrenci satırları mevcut ancak regex ile eşleşmedi")
+            if all(p.get("ocrAttempted") and not p.get("ocrUsed") for p in result["diagnostics"]["pages"]) and any(p.get("ocrAttempted") for p in result["diagnostics"]["pages"]):
+                reason_parts.append("OCR denendi ancak kullanılabilir metin üretilemedi")
+            if not reason_parts:
+                reason_parts.append("beklenen başlık/satır formatı tespit edilemedi")
+            result["message"] = "Sınıf bilgileri bulunamadı: " + "; ".join(reason_parts)
+
+        # Tanılama verilerini data içine da yansıt
+        result["data"]["errors"] = result.get("errors", [])
+        result["data"]["diagnostics"] = result.get("diagnostics", {})
 
         logger.info("PDF işleme tamamlandı")
         return result

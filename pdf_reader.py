@@ -380,13 +380,24 @@ def extract_class_info(text, teacher_line=None):
             class_type = "Hazırlık"
         # Anaokulu formatı için özel işlem
         elif "Anaokulu" in text or "ANAOKULU" in text:
-            if pattern_index == 8:  # Özel anaokulu pattern'i
+            # Grup sayısına göre güvenli ayrıştırma:
+            # - Sadece şube harfi yakalayan desen (liste sonundaki özel anaokulu deseni)
+            # - Yaş + şube harfi yakalayan desen
+            groups = grade_match.groups()
+            if len(groups) == 1:
+                # Örn: ... ANAOKULU ... ve tek grup şube harfi
                 grade = "Anaokulu"
-                section = grade_match.group(1)
+                section = groups[0]
+                class_type = "Anaokulu"
+            elif len(groups) >= 2:
+                # Örn: "Anaokulu 4 Yaş / A Şubesi" -> yaş ve şube
+                grade = f"Anaokulu {groups[0]} Yaş"
+                section = groups[1]
                 class_type = "Anaokulu"
             else:
-                grade = f"Anaokulu {grade_match.group(1)} Yaş"
-                section = grade_match.group(2)
+                # Beklenmedik durumda güvenli varsayılan
+                grade = "Anaokulu"
+                section = "A"
                 class_type = "Anaokulu"
         # Anasınıfı formatı için özel işlem
         elif "Anasınıfı" in text:
@@ -417,6 +428,16 @@ def extract_class_info(text, teacher_line=None):
             "grade": grade,
             "section": section,
             "type": class_type,
+            "teachers": teachers
+        }
+    # Hiçbir regex tutmadıysa, anaokulu/anasınıfı + liste başlığı için güvenli varsayılan
+    upper_text = _normalize_turkish(text)
+    if ("ANAOKULU" in upper_text or "ANASINIFI" in upper_text) and ("LISTE" in upper_text or "LİSTE" in text or "SINIF" in upper_text or "ÖGRENCI" in upper_text or "ÖĞRENCİ" in text):
+        logger.debug("Varsayılan anaokulu/anasınıfı başlığı tespit edildi, şube varsayılan A olarak atanacak")
+        return {
+            "grade": "Anaokulu" if "ANAOKULU" in upper_text else "Anasınıfı",
+            "section": "A",
+            "type": "Anaokulu" if "ANAOKULU" in upper_text else "Anasınıfı",
             "teachers": teachers
         }
     return None
@@ -623,7 +644,10 @@ def process_pdf(file_path, pdf_url=None):
                     # Tanılama: potansiyel başlık/öğretmen satırlarını topla
                     if re.search(r"\bSınıf\b", line, flags=re.IGNORECASE) or \
                        re.search(r"\bŞubesi\b", line, flags=re.IGNORECASE) or \
-                       re.search(r"\bListesi\b", line, flags=re.IGNORECASE):
+                       re.search(r"\bListesi\b", line, flags=re.IGNORECASE) or \
+                       re.search(r"\bAnaokulu\b", line, flags=re.IGNORECASE) or \
+                       re.search(r"\bAnasınıfı\b", line, flags=re.IGNORECASE) or \
+                       re.search(r"\bÖğrenci\b", line, flags=re.IGNORECASE):
                         if len(result["diagnostics"]["classHeaderCandidates"]) < 20:
                             result["diagnostics"]["classHeaderCandidates"].append(line)
                     if "Sınıf Öğretmeni:" in line:

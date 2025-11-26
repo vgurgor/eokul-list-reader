@@ -313,25 +313,25 @@ def extract_class_info(text, teacher_line=None):
     # Farklı formatlar için regex pattern'ları
     patterns = [
         # Ana Sınıfı formatı (ör: "Ana Sınıfı / A Şubesi Sınıf Listesi")
-        r'Ana\s*Sınıfı\s*/\s*([A-Z])\s*Şubesi(?:\s*Sınıf\s*Listesi)?',
+        r'Ana\s*Sınıfı\s*/\s*([A-ZÇĞİÖŞÜ]{1,3})\s*Şubesi(?:\s*Sınıf\s*Listesi)?',
         # FTL - Hazırlık formatı için pattern
-        r'FTL\s*-\s*Hazırlık\s*Sınıfı\s*/\s*([A-Z])\s*Şubesi\s*\(([^)]*)\)',
+        r'FTL\s*-\s*Hazırlık\s*Sınıfı\s*/\s*([A-ZÇĞİÖŞÜ]{1,3})\s*Şubesi\s*\(([^)]*)\)',
         # AL - Hazırlık formatı için pattern
-        r'AL\s*-\s*Hazırlık\s*Sınıfı\s*/\s*([A-Z])\s*Şubesi\s*\(([^)]*)\)',
+        r'AL\s*-\s*Hazırlık\s*Sınıfı\s*/\s*([A-ZÇĞİÖŞÜ]{1,3})\s*Şubesi\s*\(([^)]*)\)',
         # FTL formatı için pattern
-        r'FTL\s*-\s*(\d+)\.\s*Sınıf\s*/\s*([A-Z])\s*Şubesi\s*\(([^)]*)\)',
+        r'FTL\s*-\s*(\d+)\.\s*Sınıf\s*/\s*([A-ZÇĞİÖŞÜ]{1,3})\s*Şubesi\s*\(([^)]*)\)',
         # AL formatı için pattern
-        r'AL\s*-\s*(\d+)\.\s*Sınıf\s*/\s*([A-Z])\s*Şubesi\s*\(([^)]*)\)',
+        r'AL\s*-\s*(\d+)\.\s*Sınıf\s*/\s*([A-ZÇĞİÖŞÜ]{1,3})\s*Şubesi\s*\(([^)]*)\)',
         # Hazırlık sınıfı formatı için pattern
-        r'Hazırlık\s*Sınıfı\s*/\s*([A-Z])\s*Şubesi',
+        r'Hazırlık\s*Sınıfı\s*/\s*([A-ZÇĞİÖŞÜ]{1,3})\s*Şubesi',
         # İlkokul/Normal format için pattern
-        r'(\d+)\.\s*Sınıf\s*(?:\(([^)]*)\))?\s*/\s*([A-Z])\s*Şubesi',
+        r'(\d+)\.\s*Sınıf\s*(?:\(([^)]*)\))?\s*/\s*([A-ZÇĞİÖŞÜ]{1,3})\s*Şubesi',
         # Anaokulu formatı için pattern
-        r'Anaokulu\s*(\d+)\s*Yaş\s*/\s*([A-Z])\s*Şubesi',
+        r'Anaokulu\s*(\d+)\s*Yaş\s*/\s*([A-ZÇĞİÖŞÜ]{1,3})\s*Şubesi',
         # Anasınıfı formatı için pattern
-        r'Anasınıfı\s*/\s*([A-Z])\s*Şubesi',
+        r'Anasınıfı\s*/\s*([A-ZÇĞİÖŞÜ]{1,3})\s*Şubesi',
         # Sadece başlıkta anaokulu geçen format için pattern
-        r'(?:.*?)([A-Z])\s*(?:.*?)(?:ANAOKULU|Anaokulu)'
+        r'(?:.*?)([A-ZÇĞİÖŞÜ]{1,3})\s*(?:.*?)(?:ANAOKULU|Anaokulu)'
     ]
     
     teacher_pattern = r'Sınıf\s+Öğretmeni:\s*([A-ZÇĞİÖŞÜ\s]+)'
@@ -432,7 +432,8 @@ def extract_class_info(text, teacher_line=None):
         }
     # Hiçbir regex tutmadıysa, anaokulu/anasınıfı + liste başlığı için güvenli varsayılan
     upper_text = _normalize_turkish(text)
-    if ("ANAOKULU" in upper_text or "ANASINIFI" in upper_text) and ("LISTE" in upper_text or "LİSTE" in text or "SINIF" in upper_text or "ÖGRENCI" in upper_text or "ÖĞRENCİ" in text):
+    upper_no_space = upper_text.replace(" ", "")
+    if (("ANAOKULU" in upper_text) or ("ANASINIFI" in upper_no_space) or re.search(r"\bANA\s*SINIFI\b", upper_text)) and ("LISTE" in upper_text or "LİSTE" in text or "SINIF" in upper_text or "OGRENCI" in upper_text or "ÖĞRENCİ" in text):
         logger.debug("Varsayılan anaokulu/anasınıfı başlığı tespit edildi, şube varsayılan A olarak atanacak")
         return {
             "grade": "Anaokulu" if "ANAOKULU" in upper_text else "Anasınıfı",
@@ -647,6 +648,7 @@ def process_pdf(file_path, pdf_url=None):
                        re.search(r"\bListesi\b", line, flags=re.IGNORECASE) or \
                        re.search(r"\bAnaokulu\b", line, flags=re.IGNORECASE) or \
                        re.search(r"\bAnasınıfı\b", line, flags=re.IGNORECASE) or \
+                       re.search(r"\bAna\s*Sınıfı\b", line, flags=re.IGNORECASE) or \
                        re.search(r"\bÖğrenci\b", line, flags=re.IGNORECASE):
                         if len(result["diagnostics"]["classHeaderCandidates"]) < 20:
                             result["diagnostics"]["classHeaderCandidates"].append(line)
